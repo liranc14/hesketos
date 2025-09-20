@@ -9,7 +9,6 @@ Audio-to-Text transcription for הסכתוס podcast
 """
 
 import os
-import sys
 import traceback
 import requests
 import feedparser
@@ -21,22 +20,17 @@ import torchaudio
 # CONFIGURABLE PARAMETERS
 # ======================
 RSS_FEED_URL = "https://www.omnycontent.com/d/playlist/397b9456-4f75-4509-acff-ac0600b4a6a4/05f48c55-97c4-4049-8449-b14f00850082/e6bdb1ae-5412-42a1-a677-b14f008bbfc9/podcast.rss"
-AUDIO_DIR = "audio_files"        # Where MP3s are saved
-TEXT_DIR = "transcripts"         # Where transcripts are saved
-DEVICE = "cuda"                   # "cpu" for t3.large (no GPU) cuda for GPU usage
-MODEL_SIZE = "medium"             # WhisperX model: "tiny", "base", "small", "medium", "large"
-LANGUAGE = "he"                  # Hebrew transcription
-USE_DIARIZATION = True           # Whether to perform speaker diarization
+AUDIO_DIR = "audio_files"
+TEXT_DIR = "transcripts"
+DEVICE = "cuda"                   # "cpu" for no GPU
+MODEL_SIZE = "small"              # WhisperX model: "tiny", "base", "small", "medium", "large"
+LANGUAGE = "he"                   # Hebrew transcription
+USE_DIARIZATION = True             # Whether to perform speaker diarization
+BATCH_MINUTES = 2                 # None for full file, or number of minutes per batch
+TEST_FIRST = True                 # True to process only first batch
 
-# New parameters
-BATCH_MINUTES = 2                # None for full file, or number of minutes per batch
-TEST_FIRST = True                # True to process only first batch and exit
-# ======================
-
-
-# List of slang words
+# List of slang words (example)
 slang_words = ["גומי גומיהו", "להיטוס", "כישופון", "איכסי פיכסי"]
-
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(TEXT_DIR, exist_ok=True)
@@ -98,7 +92,7 @@ for entry in feed.entries:
 
         audio_files.append(output_path)
 
-# Filter to only numeric filenames
+# Filter numeric filenames
 filtered_audio_files = [f for f in audio_files if os.path.splitext(os.path.basename(f))[0].isdigit()]
 
 # ======================
@@ -108,8 +102,11 @@ for audio_path in filtered_audio_files:
     try:
         print(f"\nProcessing {audio_path} ...")
 
-        # Load full waveform
+        # Load full waveform (Tensor: channels x samples)
         waveform, sr = torchaudio.load(audio_path)
+
+        # Optional: convert to mono
+        # waveform = waveform.mean(dim=0, keepdim=True)
 
         # Compute batch size in samples
         if BATCH_MINUTES is not None:
@@ -132,8 +129,8 @@ for audio_path in filtered_audio_files:
         # Store all segments across batches
         all_segments = []
         for i, batch_waveform in enumerate(batches):
-            batch_numpy = batch_waveform.numpy()
-            result = whisper_model.transcribe(batch_numpy, language=LANGUAGE, batch_size=1)
+            # Pass tensor directly to WhisperX
+            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
 
             offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
             for seg in result["segments"]:
@@ -153,19 +150,19 @@ for audio_path in filtered_audio_files:
         # Merge transcription + speaker info
         text_output = ""
         for segment in all_segments:
-            start = segment["start"]
-            end = segment["end"]
+            start_time = segment["start"]
+            end_time = segment["end"]
             text = segment["text"]
 
             speaker = "Unknown"
             if diarization:
                 for turn in diarization.itertracks(yield_label=True):
                     segment_start, segment_end, label = turn
-                    if segment_end > start and segment_start < end:
+                    if segment_end > start_time and segment_start < end_time:
                         speaker = label
                         break
 
-            text_output += f"[{start:.2f}-{end:.2f}] {speaker}: {text}\n"
+            text_output += f"[{start_time:.2f}-{end_time:.2f}] {speaker}: {text}\n"
 
         # Save transcript
         base_name = os.path.splitext(os.path.basename(audio_path))[0]
@@ -175,7 +172,6 @@ for audio_path in filtered_audio_files:
 
         print(f"✅ Saved transcript: {txt_path}")
 
-        # Exit if test mode
         if TEST_FIRST:
             print("\nTest mode enabled: stopping after first batch.")
             break
