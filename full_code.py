@@ -24,7 +24,7 @@ RSS_FEED_URL = "https://www.omnycontent.com/d/playlist/397b9456-4f75-4509-acff-a
 AUDIO_DIR = "audio_files"        # Where MP3s are saved
 TEXT_DIR = "transcripts"         # Where transcripts are saved
 DEVICE = "cuda"                   # "cpu" for t3.large (no GPU) cuda for GPU usage
-MODEL_SIZE = "small"             # WhisperX model: "tiny", "base", "small", "medium", "large"
+MODEL_SIZE = "medium"             # WhisperX model: "tiny", "base", "small", "medium", "large"
 LANGUAGE = "he"                  # Hebrew transcription
 USE_DIARIZATION = True           # Whether to perform speaker diarization
 
