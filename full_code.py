@@ -109,10 +109,7 @@ for audio_path in filtered_audio_files:
         # waveform = waveform.mean(dim=0, keepdim=True)
 
         # Compute batch size in samples
-        if BATCH_MINUTES is not None:
-            batch_samples = int(BATCH_MINUTES * 60 * sr)
-        else:
-            batch_samples = waveform.shape[1]
+        batch_samples = int(BATCH_MINUTES * 60 * sr) if BATCH_MINUTES else waveform.shape[1]
 
         # Split waveform into batches
         batches = []
@@ -129,8 +126,9 @@ for audio_path in filtered_audio_files:
         # Store all segments across batches
         all_segments = []
         for i, batch_waveform in enumerate(batches):
-            # Pass tensor directly to WhisperX
-            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
+            # Convert to NumPy for WhisperX VAD preprocessing
+            batch_np = batch_waveform.numpy()
+            result = whisper_model.transcribe(batch_np, language=LANGUAGE, batch_size=1)
 
             offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
             for seg in result["segments"]:
