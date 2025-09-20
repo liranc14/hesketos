@@ -140,7 +140,7 @@ for audio_path in filtered_audio_files:
         # Store all segments across batches
         all_segments = []
         for i, batch_waveform in enumerate(batches):
-            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1, initial_prompt=ADDITIONAL_WORDS)
+            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
 
             offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
             for seg in result["segments"]:
