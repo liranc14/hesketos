@@ -5,6 +5,7 @@ Audio-to-Text transcription for הסכתוס podcast
 - Transcribes Hebrew audio using WhisperX
 - Adds speaker diarization + timestamps (if available)
 - Saves one TXT per episode
+- Supports batching by minutes and a test mode for quick testing
 """
 
 import os
@@ -14,6 +15,7 @@ import requests
 import feedparser
 import whisperx
 from pyannote.audio import Pipeline
+import torchaudio
 
 # ======================
 # CONFIGURABLE PARAMETERS
@@ -21,10 +23,14 @@ from pyannote.audio import Pipeline
 RSS_FEED_URL = "https://www.omnycontent.com/d/playlist/397b9456-4f75-4509-acff-ac0600b4a6a4/05f48c55-97c4-4049-8449-b14f00850082/e6bdb1ae-5412-42a1-a677-b14f008bbfc9/podcast.rss"
 AUDIO_DIR = "audio_files"        # Where MP3s are saved
 TEXT_DIR = "transcripts"         # Where transcripts are saved
-DEVICE = "cpu"                   # "cpu" for t3.large (no GPU) cuda for GPU usage
+DEVICE = "cuda"                   # "cpu" for t3.large (no GPU) cuda for GPU usage
 MODEL_SIZE = "small"             # WhisperX model: "tiny", "base", "small", "medium", "large"
 LANGUAGE = "he"                  # Hebrew transcription
 USE_DIARIZATION = True           # Whether to perform speaker diarization
+
+# New parameters
+BATCH_MINUTES = 2                # None for full file, or number of minutes per batch
+TEST_FIRST = True                # True to process only first batch and exit
 # ======================
 
 os.makedirs(AUDIO_DIR, exist_ok=True)
@@ -51,7 +57,6 @@ if USE_DIARIZATION:
 # ======================
 print("Fetching RSS feed...")
 feed = feedparser.parse(RSS_FEED_URL)
-
 audio_files = []
 
 for entry in feed.entries:
@@ -88,17 +93,46 @@ for entry in feed.entries:
 
         audio_files.append(output_path)
 
+# Filter to only numeric filenames
+filtered_audio_files = [f for f in audio_files if os.path.splitext(os.path.basename(f))[0].isdigit()]
+
 # ======================
 # Transcribe and diarize
 # ======================
-filtered_audio_files = [f for f in audio_files if os.path.splitext(os.path.basename(f))[0].isdigit()]
-
 for audio_path in filtered_audio_files:
     try:
         print(f"\nProcessing {audio_path} ...")
 
-        # Transcription
-        result = whisper_model.transcribe(audio_path, language=LANGUAGE)
+        # Load full waveform
+        waveform, sr = torchaudio.load(audio_path)
+
+        # Compute batch size in samples
+        if BATCH_MINUTES is not None:
+            batch_samples = int(BATCH_MINUTES * 60 * sr)
+        else:
+            batch_samples = waveform.shape[1]
+
+        # Split waveform into batches
+        batches = []
+        start = 0
+        while start < waveform.shape[1]:
+            end = min(start + batch_samples, waveform.shape[1])
+            batches.append(waveform[:, start:end])
+            start = end
+
+        # Quick test mode: only first batch
+        if TEST_FIRST and batches:
+            batches = [batches[0]]
+
+        # Store all segments across batches
+        all_segments = []
+        for i, batch_waveform in enumerate(batches):
+            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
+            offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
+            for seg in result["segments"]:
+                seg["start"] += offset_sec
+                seg["end"] += offset_sec
+                all_segments.append(seg)
 
         # Speaker diarization
         diarization = None
@@ -111,7 +145,7 @@ for audio_path in filtered_audio_files:
 
         # Merge transcription + speaker info
         text_output = ""
-        for segment in result["segments"]:
+        for segment in all_segments:
             start = segment["start"]
             end = segment["end"]
             text = segment["text"]
@@ -134,10 +168,16 @@ for audio_path in filtered_audio_files:
 
         print(f"✅ Saved transcript: {txt_path}")
 
+        # Exit if test mode
+        if TEST_FIRST:
+            print("\nTest mode enabled: stopping after first batch.")
+            break
+
     except Exception as e:
         print(f"❌ Failed processing {audio_path}:")
         traceback.print_exc()
     finally:
-        break
+        if TEST_FIRST:
+            break
 
 print("\nAll done!")
