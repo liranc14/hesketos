@@ -102,16 +102,16 @@ for audio_path in filtered_audio_files:
     try:
         print(f"\nProcessing {audio_path} ...")
 
-        # Load full waveform (Tensor: channels x samples)
+        # Load full waveform
         waveform, sr = torchaudio.load(audio_path)
 
-        # Optional: convert to mono
-        # waveform = waveform.mean(dim=0, keepdim=True)
+        # Optional: convert stereo -> mono if you want
+        # waveform = waveform.mean(dim=0, keepdim=True)  
 
-        # Compute batch size in samples
+        # Batch size
         batch_samples = int(BATCH_MINUTES * 60 * sr) if BATCH_MINUTES else waveform.shape[1]
 
-        # Split waveform into batches
+        # Split into batches
         batches = []
         start = 0
         while start < waveform.shape[1]:
@@ -119,22 +119,20 @@ for audio_path in filtered_audio_files:
             batches.append(waveform[:, start:end])
             start = end
 
-        # Quick test mode: only first batch
         if TEST_FIRST and batches:
             batches = [batches[0]]
 
-        # Store all segments across batches
         all_segments = []
         for i, batch_waveform in enumerate(batches):
-            # Convert to NumPy for WhisperX VAD preprocessing
-            batch_np = batch_waveform.numpy()
-            result = whisper_model.transcribe(batch_np, language=LANGUAGE, batch_size=1)
+            # Pass tensor directly (shape: channels x samples)
+            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
 
             offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
             for seg in result["segments"]:
                 seg["start"] += offset_sec
                 seg["end"] += offset_sec
                 all_segments.append(seg)
+
 
         # Speaker diarization
         diarization = None
