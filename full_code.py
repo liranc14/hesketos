@@ -33,6 +33,19 @@ BATCH_MINUTES = 2                # None for full file, or number of minutes per 
 TEST_FIRST = True                # True to process only first batch and exit
 # ======================
 
+
+# List of slang words
+slang_words = ["גומי גומיהו", "להיטוס", "כישופון", "איכסי פיכסי"]
+
+# Build explanatory prompt
+ADDITIONAL_WORDS = (
+    "The following words are slang used in this podcast and might appear in the audio: "
+    + ", ".join(slang_words)
+)
+
+
+
+
 os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(TEXT_DIR, exist_ok=True)
 
@@ -127,7 +140,8 @@ for audio_path in filtered_audio_files:
         # Store all segments across batches
         all_segments = []
         for i, batch_waveform in enumerate(batches):
-            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1)
+            result = whisper_model.transcribe(batch_waveform, language=LANGUAGE, batch_size=1, initial_prompt=ADDITIONAL_WORDS)
+
             offset_sec = i * (BATCH_MINUTES * 60 if BATCH_MINUTES else 0)
             for seg in result["segments"]:
                 seg["start"] += offset_sec
