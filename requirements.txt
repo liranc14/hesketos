@@ -1,0 +1,8 @@
+requests
+feedparser
+
+openai-whisper
+whisperx
+torch
+torchaudio
+pyannote.audio
