@@ -135,5 +135,7 @@ for audio_path in audio_files:
     except Exception as e:
         print(f"❌ Failed processing {audio_path}:")
         traceback.print_exc()
+    finally:
+        break
 
 print("\nAll done!")
