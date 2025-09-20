@@ -21,7 +21,7 @@ from pyannote.audio import Pipeline
 RSS_FEED_URL = "https://www.omnycontent.com/d/playlist/397b9456-4f75-4509-acff-ac0600b4a6a4/05f48c55-97c4-4049-8449-b14f00850082/e6bdb1ae-5412-42a1-a677-b14f008bbfc9/podcast.rss"
 AUDIO_DIR = "audio_files"        # Where MP3s are saved
 TEXT_DIR = "transcripts"         # Where transcripts are saved
-DEVICE = "cpu"                   # "cpu" for t3.large (no GPU)
+DEVICE = "cpu"                   # "cpu" for t3.large (no GPU) cuda for GPU usage
 MODEL_SIZE = "small"             # WhisperX model: "tiny", "base", "small", "medium", "large"
 LANGUAGE = "he"                  # Hebrew transcription
 USE_DIARIZATION = True           # Whether to perform speaker diarization
@@ -91,7 +91,9 @@ for entry in feed.entries:
 # ======================
 # Transcribe and diarize
 # ======================
-for audio_path in audio_files:
+filtered_audio_files = [f for f in audio_files if os.path.splitext(os.path.basename(f))[0].isdigit()]
+
+for audio_path in filtered_audio_files:
     try:
         print(f"\nProcessing {audio_path} ...")
 
